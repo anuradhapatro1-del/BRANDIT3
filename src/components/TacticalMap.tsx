@@ -13,7 +13,7 @@ import { TacticalStreetMap } from './TacticalStreetMap';
 
 const GOOGLE_MAPS_API_KEY =
   (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string) ||
-  'AIzaSyB4kw6m4kPLtvJy7gtq2GoNY6Gjr5WwH1s';
+  'AIzaSyD4sYnlrapT_xnk_L8qkTv5nnzTGMAMdos';
 
 // Senior Hackathon Tactical Black, Red, and Blue Map Styling
 const DARK_TACTICAL_MAP_STYLES = [
@@ -134,23 +134,17 @@ const TacticalRouteLayer: React.FC<{
   destination: { lat: number; lng: number } | null;
   travelMode: 'WALKING' | 'DRIVING' | 'BICYCLING';
   onRouteCalculated?: (routeInfo: { distanceText: string; durationText: string }) => void;
-}> = ({ origin, destination, travelMode, onRouteCalculated }) => {
+}> = ({ origin, destination, travelMode }) => {
   const map = useMap();
-  const directionsRendererRef = React.useRef<any>(null);
-  const fallbackPolylineRef = React.useRef<any>(null);
+  const polylineRef = React.useRef<any>(null);
 
   useEffect(() => {
-    // Check window.google
     const gWindow = window as any;
     if (!map || !gWindow.google || !gWindow.google.maps) return;
 
-    if (directionsRendererRef.current) {
-      directionsRendererRef.current.setMap(null);
-      directionsRendererRef.current = null;
-    }
-    if (fallbackPolylineRef.current) {
-      fallbackPolylineRef.current.setMap(null);
-      fallbackPolylineRef.current = null;
+    if (polylineRef.current) {
+      polylineRef.current.setMap(null);
+      polylineRef.current = null;
     }
 
     if (!origin || !destination) return;
@@ -158,72 +152,28 @@ const TacticalRouteLayer: React.FC<{
     const googleMaps = gWindow.google.maps;
 
     try {
-      const directionsService = new googleMaps.DirectionsService();
-      const directionsRenderer = new googleMaps.DirectionsRenderer({
+      const strokeColor = travelMode === 'DRIVING' ? '#ef4444' : '#38bdf8';
+      const poly = new googleMaps.Polyline({
+        path: [
+          { lat: origin.lat, lng: origin.lng },
+          { lat: destination.lat, lng: destination.lng }
+        ],
+        geodesic: true,
+        strokeColor,
+        strokeOpacity: 0.9,
+        strokeWeight: 5,
         map: map,
-        suppressMarkers: true,
-        preserveViewport: true,
-        polylineOptions: {
-          strokeColor: travelMode === 'DRIVING' ? '#ef4444' : '#3b82f6',
-          strokeOpacity: 0.9,
-          strokeWeight: 6,
-          zIndex: 25
-        }
+        zIndex: 25
       });
-      directionsRendererRef.current = directionsRenderer;
-
-      const mode =
-        travelMode === 'DRIVING'
-          ? googleMaps.TravelMode.DRIVING
-          : travelMode === 'BICYCLING'
-          ? googleMaps.TravelMode.BICYCLING
-          : googleMaps.TravelMode.WALKING;
-
-      directionsService.route(
-        {
-          origin: new googleMaps.LatLng(origin.lat, origin.lng),
-          destination: new googleMaps.LatLng(destination.lat, destination.lng),
-          travelMode: mode
-        },
-        (result: any, status: any) => {
-          if (status === googleMaps.DirectionsStatus.OK && result) {
-            directionsRenderer.setDirections(result);
-            const leg = result.routes?.[0]?.legs?.[0];
-            if (leg && onRouteCalculated) {
-              onRouteCalculated({
-                distanceText: leg.distance?.text || '',
-                durationText: leg.duration?.text || ''
-              });
-            }
-          } else {
-            // Draw direct fallback geodesic line with radar glow
-            const path = [
-              new googleMaps.LatLng(origin.lat, origin.lng),
-              new googleMaps.LatLng(destination.lat, destination.lng)
-            ];
-            const poly = new googleMaps.Polyline({
-              path,
-              geodesic: true,
-              strokeColor: '#38bdf8',
-              strokeOpacity: 0.85,
-              strokeWeight: 4,
-              map: map,
-              zIndex: 25
-            });
-            fallbackPolylineRef.current = poly;
-          }
-        }
-      );
+      polylineRef.current = poly;
     } catch {
       // Fallback
     }
 
     return () => {
-      if (directionsRendererRef.current) {
-        directionsRendererRef.current.setMap(null);
-      }
-      if (fallbackPolylineRef.current) {
-        fallbackPolylineRef.current.setMap(null);
+      if (polylineRef.current) {
+        polylineRef.current.setMap(null);
+        polylineRef.current = null;
       }
     };
   }, [map, origin?.lat, origin?.lng, destination?.lat, destination?.lng, travelMode]);
@@ -318,7 +268,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   onOpenFamilyShield
 }) => {
   const [mapType, setMapType] = useState<'roadmap' | 'satellite' | 'hybrid' | 'terrain'>('roadmap');
-  const [viewMode, setViewMode] = useState<'street' | 'google' | 'solarpunk'>('street');
+  const [viewMode, setViewMode] = useState<'street' | 'google' | 'solarpunk'>('google');
   const [streetTheme, setStreetTheme] = useState<'dark' | 'osm' | 'satellite'>('dark');
   const [googleMapsLoaded, setGoogleMapsLoaded] = useState(false);
   const [googleMapsFailed, setGoogleMapsFailed] = useState(false);

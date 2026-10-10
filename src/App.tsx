@@ -52,7 +52,7 @@ export default function App() {
   const [isSosActive, setIsSosActive] = useState(false);
   const [activeTab, setActiveTab] = useState('radar');
   const [searchQuery, setSearchQuery] = useState('');
-  const [radiusKm, setRadiusKm] = useState(15);
+  const [radiusKm, setRadiusKm] = useState(30);
   const [selectedCategory, setSelectedCategory] = useState('all');
 
   // Earthquake Scanner State
@@ -70,12 +70,12 @@ export default function App() {
   });
   const [isLocating, setIsLocating] = useState(false);
 
-  // Layer filters
+  // Layer filters (default false so all lifelines, hospitals & shelters are visible by default)
   const [filterFamily, setFilterFamily] = useState(false);
-  const [filterRadiation, setFilterRadiation] = useState(true);
-  const [filterPet, setFilterPet] = useState(true);
-  const [filterWheelchair, setFilterWheelchair] = useState(true);
-  const [filterWater, setFilterWater] = useState(true);
+  const [filterRadiation, setFilterRadiation] = useState(false);
+  const [filterPet, setFilterPet] = useState(false);
+  const [filterWheelchair, setFilterWheelchair] = useState(false);
+  const [filterWater, setFilterWater] = useState(false);
 
   // Modals & Safety Alerts
   const [familyModalOpen, setFamilyModalOpen] = useState(false);
@@ -104,6 +104,13 @@ export default function App() {
   // High contrast mode
   const [isSunlightMode, setIsSunlightMode] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
+
+  useEffect(() => {
+    const handleQuota = () => setIsQuotaExceeded(true);
+    window.addEventListener('gmp-quota-exceeded', handleQuota);
+    return () => window.removeEventListener('gmp-quota-exceeded', handleQuota);
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -465,9 +472,11 @@ export default function App() {
   // Filter Havens by distance (within radiusKm), search query, and categories
   const filteredHavens = useMemo(() => {
     return havensList.filter((h) => {
-      // Distance filter: must be within radiusKm
-      if (h.distanceKm !== undefined && h.distanceKm > radiusKm) {
-        return false;
+      // Distance filter: only enforce if radiusKm is under 50 and distance is within reasonable boundary
+      if (radiusKm < 50 && h.distanceKm !== undefined) {
+        if (h.distanceKm <= 50 && h.distanceKm > radiusKm) {
+          return false;
+        }
       }
 
       // Search query
@@ -477,6 +486,8 @@ export default function App() {
           h.name.toLowerCase().includes(query) ||
           h.sector.toLowerCase().includes(query) ||
           h.address.toLowerCase().includes(query) ||
+          h.category.toLowerCase().includes(query) ||
+          h.categoryLabel.toLowerCase().includes(query) ||
           h.tags.some((t) => t.toLowerCase().includes(query)) ||
           (h.description && h.description.toLowerCase().includes(query));
         if (!matches) return false;
@@ -486,12 +497,16 @@ export default function App() {
       if (selectedCategory !== 'all') {
         if (selectedCategory === 'family') {
           if (!h.childFriendly) return false;
+        } else if (selectedCategory === 'shelters' || selectedCategory === 'shelter') {
+          if (h.category !== 'safehouse' && h.category !== 'bunker') return false;
+        } else if (selectedCategory === 'hospital' || selectedCategory === 'medical') {
+          if (h.category !== 'hospital') return false;
         } else if (h.category !== selectedCategory) {
           return false;
         }
       }
 
-      // Layer checkbox filters
+      // Layer checkbox filters (only restrict when explicitly toggled on)
       if (filterFamily && !h.childFriendly) return false;
       if (filterRadiation && !h.radiationSafe) return false;
       if (filterPet && !h.petFriendly) return false;
@@ -520,7 +535,7 @@ export default function App() {
       setFilterFamily(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (tab === 'shelters') {
-      setSelectedCategory('safehouse');
+      setSelectedCategory('shelter');
       setFilterFamily(false);
       const el = document.getElementById('shelters-section');
       if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -566,6 +581,24 @@ export default function App() {
 
   return (
     <div className="bg-[#020617] text-slate-100 antialiased selection:bg-blue-600 selection:text-white flex flex-col min-h-screen">
+      {/* Google Maps Demo Quota Notification */}
+      {isQuotaExceeded && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
+          <span>
+            Google Maps Platform quota reached. If you are the app owner, visit{' '}
+            <a
+              href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-semibold text-amber-950 hover:text-amber-800"
+            >
+              maps developer site
+            </a>{' '}
+            for instructions to update your account.
+          </span>
+        </div>
+      )}
+
       {/* Toast Notification (Black, Blue, Red) */}
       {toastMessage && (
         <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-[#050b1e] text-white px-5 py-2.5 rounded-full font-mono text-xs font-bold shadow-2xl border border-blue-500 animate-fade-in flex items-center gap-2 max-w-lg text-center">
